@@ -29,7 +29,7 @@ def import_module(path: str) -> ModuleType:
     If we import by filepath, we must also assign a name to it and add it to sys.modules BEFORE
     calling 'spec.loader.exec_module' because there is code in pydantic which requires that the
     definition exist in sys.modules under that name.
-    """
+    """  # noqa
     try:
         if os.path.exists(path):
             name = uuid4().hex
@@ -42,7 +42,7 @@ def import_module(path: str) -> ModuleType:
             return importlib.import_module(path)
     except Exception as e:
         logger.error(
-            "The --module argument must be a module path separated by dots or a valid filepath"
+            "The --module argument must be a module path separated by dots or a valid filepath"  # noqa
         )
         raise e
 
@@ -93,10 +93,12 @@ def clean_output_file(output_filename: str) -> None:
     """
     Clean up the output file typescript definitions were written to by:
     1. Removing the 'master model'.
-       This is a faux pydantic model with references to all the *actual* models necessary for generating
-       clean typescript definitions without any duplicates. We don't actually want it in the output, so
+       This is a faux pydantic model with references to all the *actual* models
+       necessary for generating clean typescript definitions without any duplicates.
+       We don't actually want it in the output, so
        this function removes it from the generated typescript file.
-    2. Adding a banner comment with clear instructions for how to regenerate the typescript definitions.
+    2. Adding a banner comment with clear instructions for how to regenerate
+       the typescript definitions.
     """
     with open(output_filename, "r") as f:
         lines = f.readlines()
@@ -113,8 +115,8 @@ def clean_output_file(output_filename: str) -> None:
         "/* tslint:disable */\n",
         "/* eslint-disable */\n",
         "/**\n",
-        "/* This file was automatically generated from pydantic models by running pydantic2ts.\n",
-        "/* Do not modify it by hand - just update the pydantic models and then re-run the script\n",
+        "/* This file was automatically generated from pydantic models by running pydantic2ts.\n",  # noqa
+        "/* Do not modify it by hand - just update the pydantic models and then re-run the script\n",  # noqa
         "*/\n\n",
     ]
 
@@ -182,15 +184,18 @@ def generate_typescript_defs(
     """
     Convert the pydantic models in a python module into typescript interfaces.
 
-    :param module: python module containing pydantic model definitions, ex: my_project.api.schemas
+    :param module: python module containing pydantic model definitions,
+                    ex: my_project.api.schemas
     :param output: file that the typescript definitions will be written to
-    :param exclude: optional, a tuple of names for pydantic models which should be omitted from the typescript output.
-    :param json2ts_cmd: optional, the command that will execute json2ts. Provide this if the executable is not
+    :param exclude: optional, a tuple of names for pydantic models which
+                    should be omitted from the typescript output.
+    :param json2ts_cmd: optional, the command that will execute json2ts.
+                        Provide this if the executable is not
                         discoverable or if it's locally installed (ex: 'yarn json2ts').
     """
     if " " not in json2ts_cmd and not shutil.which(json2ts_cmd):
         raise Exception(
-            "json2ts must be installed. Instructions can be found here: "
+            "quicktype must be installed. Instructions can be found here: "
             "https://www.npmjs.com/package/json-schema-to-typescript"
         )
 
@@ -271,8 +276,9 @@ def parse_cli_args(args: List[str] = None) -> argparse.Namespace:
         dest="json2ts_cmd",
         default="quicktype",
         help="path to the json-schema-to-typescript executable.\n"
-        "Provide this if it's not discoverable or if it's only installed locally (example: 'yarn json2ts').\n"
-        "(default: json2ts)",
+        "Provide this if it's not discoverable \n"
+        "or if it's only installed locally (example: 'pnpm add -g quicktype').\n"
+        "(default: quicktype)",
     )
     return parser.parse_args(args)
 
