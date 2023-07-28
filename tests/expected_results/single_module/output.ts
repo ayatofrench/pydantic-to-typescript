@@ -1,20 +1,28 @@
-/* tslint:disable */
-/* eslint-disable */
-/**
-/* This file was automatically generated from pydantic models by running pydantic2ts.
-/* Do not modify it by hand - just update the pydantic models and then re-run the script
-*/
+import * as z from "zod";
 
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
-export interface LoginResponseData {
-  token: string;
-  profile: Profile;
-}
-export interface Profile {
-  username: string;
-  age?: number;
-  hobbies: string[];
-}
+
+export const ProfileSchema = z.object({
+    "age": z.union([z.number(), z.null()]),
+    "hobbies": z.array(z.string()),
+    "username": z.string(),
+});
+export type Profile = z.infer<typeof ProfileSchema>;
+
+export const LoginResponseDataSchema = z.object({
+    "profile": ProfileSchema,
+    "token": z.string(),
+});
+export type LoginResponseData = z.infer<typeof LoginResponseDataSchema>;
+
+export const LoginCredentialsSchema = z.object({
+    "password": z.string(),
+    "username": z.string(),
+});
+export type LoginCredentials = z.infer<typeof LoginCredentialsSchema>;
+
+export const CliSingleModuleSchema = z.object({
+    "LoginCredentials": LoginCredentialsSchema,
+    "LoginResponseData": LoginResponseDataSchema,
+    "Profile": ProfileSchema,
+});
+export type CliSingleModule = z.infer<typeof CliSingleModuleSchema>;

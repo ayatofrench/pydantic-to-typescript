@@ -12,7 +12,7 @@ from types import ModuleType
 from typing import Any, Dict, List, Tuple, Type
 from uuid import uuid4
 
-from pydantic import BaseModel, Extra, create_model
+from pydantic import BaseModel, create_model
 
 try:
     from pydantic.generics import GenericModel
@@ -152,34 +152,32 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
     '[k: string]: any' from being added to every interface. This change is reverted
     once the schema has been generated.
     """
-    model_extras = [getattr(m.Config, "extra", None) for m in models]
+    model_extras = [getattr(m.model_config, "extra", None) for m in models]
 
     try:
         for m in models:
-            if getattr(m.Config, "extra", None) != Extra.allow:
-                m.Config.extra = Extra.forbid
+            if "extra" in m.model_config and m.model_config["extra"] != "allow":
+                m.model_config["extra"] = "forbid"
 
-        master_model = create_model(
+        master_model: BaseModel = create_model(
             "_Master_", **{m.__name__: (m, ...) for m in models}
         )
-        master_model.Config.extra = Extra.forbid
-        master_model.Config.schema_extra = staticmethod(clean_schema)
+        master_model.model_config["extra"] = "forbid"
 
-        schema = json.loads(master_model.schema_json())
-
-        for d in schema.get("definitions", {}).values():
-            clean_schema(d)
-
-        return json.dumps(schema, indent=2)
+        return json.dumps(master_model.model_json_schema(), indent=2)
 
     finally:
         for m, x in zip(models, model_extras):
             if x is not None:
-                m.Config.extra = x
+                m.model_config["extra"] = x
 
 
 def generate_typescript_defs(
-    module: str, output: str, exclude: Tuple[str] = (), json2ts_cmd: str = "json2ts"
+    module: str,
+    output: str,
+    exclude: Tuple[str] = (),
+    schema_out_dir: str | None = None,
+    json2ts_cmd: str = "quicktype",
 ) -> None:
     """
     Convert the pydantic models in a python module into typescript interfaces.
@@ -206,22 +204,31 @@ def generate_typescript_defs(
     logger.info("Generating JSON schema from pydantic models...")
 
     schema = generate_json_schema(models)
-    schema_dir = mkdtemp()
-    schema_file_path = os.path.join(schema_dir, "schema.json")
+    schema_dir = None
 
-    with open(schema_file_path, "w") as f:
-        f.write(schema)
+    if schema_out_dir:
+        logger.info("We should be here")
+        # TODO: Fix the file name
+        schema_file_path = os.path.join(schema_out_dir, "schema.json")
+        with open(schema_file_path, "w") as f:
+            f.write(schema)
+    else:
+        schema_dir = mkdtemp()
+        schema_file_path = os.path.join(schema_dir, "schema.json")
+        with open(schema_file_path, "w") as f:
+            f.write(schema)
 
     logger.info("Converting JSON schema to typescript definitions...")
 
     json2ts_exit_code = os.system(
-        f'{json2ts_cmd} -i {schema_file_path} -o {output} --bannerComment ""'
+        f"{json2ts_cmd} -s schema {schema_file_path} -l typescript-zod -o {output}"
     )
 
-    shutil.rmtree(schema_dir)
+    if schema_dir:
+        shutil.rmtree(schema_dir)
 
     if json2ts_exit_code == 0:
-        clean_output_file(output)
+        # clean_output_file(output)
         logger.info(f"Saved typescript definitions to {output}.")
     else:
         raise RuntimeError(
@@ -255,9 +262,14 @@ def parse_cli_args(args: List[str] = None) -> argparse.Namespace:
         "This option can be defined multiple times.",
     )
     parser.add_argument(
+        "--schema-dir",
+        dest="schema_dir",
+        default=None,
+    )
+    parser.add_argument(
         "--json2ts-cmd",
         dest="json2ts_cmd",
-        default="json2ts",
+        default="quicktype",
         help="path to the json-schema-to-typescript executable.\n"
         "Provide this if it's not discoverable or if it's only installed locally (example: 'yarn json2ts').\n"
         "(default: json2ts)",
@@ -275,6 +287,7 @@ def main() -> None:
         args.module,
         args.output,
         tuple(args.exclude),
+        args.schema_dir,
         args.json2ts_cmd,
     )
 
