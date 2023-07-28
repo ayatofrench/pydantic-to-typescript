@@ -33,7 +33,9 @@ def run_test(
     output_path = tmpdir.join(f"cli_{test_name}.ts").strpath
 
     if call_from_python:
-        generate_typescript_defs(module_path, output_path, exclude)
+        generate_typescript_defs(
+            module=module_path, output=output_path, exclude=exclude
+        )
     else:
         cmd = f"pydantic2ts --module {module_path} --output {output_path}"
         for model_to_exclude in exclude:
