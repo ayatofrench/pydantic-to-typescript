@@ -3,12 +3,18 @@ on:
   push:
   pull_request:
 jobs:
+  # lint:
+    # name: Lint code with black
+    # runs-on: ubuntu-latest
+    # steps:
+    #   - uses: actions/checkout@v2
+    #   - uses: psf/black@stable
   lint:
-    name: Lint code with black
+    name: Lint code with Ruff
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: psf/black@stable
+      - uses: actions/checkout@v3
+      - uses: chartboost/ruff-action@v1
   test:
     name: Run unit tests
     needs: lint
