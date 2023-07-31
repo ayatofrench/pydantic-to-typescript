@@ -12,12 +12,12 @@ from types import ModuleType
 from typing import Any, Dict, List, Tuple, Type
 from uuid import uuid4
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, Extra, create_model
 
-try:
-    from pydantic.generics import GenericModel
-except ImportError:
-    GenericModel = None
+# try:
+#     from pydantic.generics import GenericModel
+# except ImportError:
+#     GenericModel = None
 
 logger = logging.getLogger("pydantic2ts")
 
@@ -65,8 +65,8 @@ def is_concrete_pydantic_model(obj) -> bool:
         return False
     elif obj is BaseModel:
         return False
-    elif GenericModel and issubclass(obj, GenericModel):
-        return bool(obj.__concrete__)
+    # elif GenericModel and issubclass(obj, GenericModel):
+    #     return bool(obj.__concrete__)
     else:
         return issubclass(obj, BaseModel)
 
@@ -101,13 +101,18 @@ def clean_output_file(output_filename: str) -> None:
     with open(output_filename, "r") as f:
         lines = f.readlines()
 
+    basename = os.path.basename(output_filename).split(".")[0]
+    typename = "".join(s.capitalize() for s in basename.split("_"))
+
     start, end = None, None
     for i, line in enumerate(lines):
-        if line.rstrip("\r\n") == "export interface _Master_ {":
+        if line.rstrip("\r\n") == f"export const {typename}Schema = z.object({{":
             start = i
-        elif (start is not None) and line.rstrip("\r\n") == "}":
-            end = i
             break
+        # elif (start is not None) and line.rstrip(
+        #     "\r\n"
+        # ) == f"export type {typename} = z.infer<{basename}Schema>;":
+        #     break
 
     banner_comment_lines = [
         "/* tslint:disable */\n",
@@ -118,10 +123,14 @@ def clean_output_file(output_filename: str) -> None:
         "*/\n\n",
     ]
 
-    new_lines = banner_comment_lines + lines[:start] + lines[(end + 1) :]
+    new_lines = None
+    # if end:
+    # new_lines = banner_comment_lines + lines[:start] + lines[(end + 1) :]
+    new_lines = banner_comment_lines + lines[:start]
 
-    with open(output_filename, "w") as f:
-        f.writelines(new_lines)
+    if new_lines:
+        with open(output_filename, "w") as f:
+            f.writelines(new_lines)
 
 
 def clean_schema(schema: Dict[str, Any]) -> None:
@@ -152,24 +161,58 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
     '[k: string]: any' from being added to every interface. This change is reverted
     once the schema has been generated.
     """
-    model_extras = [getattr(m.model_config, "extra", None) for m in models]
+    model_extras = [getattr(m.Config, "extra", None) for m in models]
 
     try:
         for m in models:
-            if "extra" in m.model_config and m.model_config["extra"] != "allow":
-                m.model_config["extra"] = "forbid"
+            if getattr(m.Config, "extra", None) != "allow":
+                m.Config.extra = Extra.forbid
 
+        master_model = create_model(
+            "_Master_", **{m.__name__: (m, ...) for m in models}
+        )
+        # master_model.Config.extra = Extra.forbid
+        # master_model.Config.schema_extra = staticmethod(clean_schema)
+
+        # schema = json.loads(master_model.schema_json())
         master_model: BaseModel = create_model(
             "_Master_", **{m.__name__: (m, ...) for m in models}
         )
-        master_model.model_config["extra"] = "forbid"
+        master_model.Config.extra = Extra.forbid
+        master_model.Config.schema_extra = staticmethod(clean_schema)
 
-        return json.dumps(master_model.model_json_schema(), indent=2)
+        schema = json.loads(master_model.schema_json())
+
+        for d in schema.get("definitions", {}).values():
+            clean_schema(d)
+
+        return json.dumps(schema, indent=2)
+
+        # return json.dumps(schema, indent=2)
 
     finally:
         for m, x in zip(models, model_extras):
             if x is not None:
-                m.model_config["extra"] = x
+                m.Config.extra = x
+    # model_extras = [getattr(m.Config, "extra", None) for m in models]
+    # model_extras = [getattr(m.model_config, "extra", None) for m in models]
+
+    # try:
+    #     for m in models:
+    #         if "extra" in m.Config and m.model_config["extra"] != "allow":
+    #             m.Config["extra"] = "forbid"
+
+    # master_model: BaseModel = create_model(
+    #     "_Master_", **{m.__name__: (m, ...) for m in models}
+    # )
+    # master_model.Config["extra"] = "forbid"
+    #
+    # return json.dumps(master_model.model_json_schema(), indent=2)
+
+    # finally:
+    #     for m, x in zip(models, model_extras):
+    #         if x is not None:
+    #             m.Config["extra"] = x
 
 
 def generate_typescript_defs(
@@ -188,7 +231,6 @@ def generate_typescript_defs(
     :param json2ts_cmd: optional, the command that will execute json2ts. Provide this if the executable is not
                         discoverable or if it's locally installed (ex: 'yarn json2ts').
     """
-    print(json2ts_cmd)
     if " " not in json2ts_cmd and not shutil.which(json2ts_cmd):
         raise Exception(
             "json2ts must be installed. Instructions can be found here: "

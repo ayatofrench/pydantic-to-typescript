@@ -2,7 +2,7 @@ import * as z from "zod";
 
 
 export const ProfileSchema = z.object({
-    "age": z.union([z.number(), z.null()]),
+    "age": z.union([z.number(), z.null()]).optional(),
     "hobbies": z.array(z.string()),
     "username": z.string(),
 });
