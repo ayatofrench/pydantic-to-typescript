@@ -14,10 +14,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Extra, create_model
 
-# try:
-#     from pydantic.generics import GenericModel
-# except ImportError:
-#     GenericModel = None
 
 logger = logging.getLogger("pydantic2ts")
 
@@ -29,7 +25,7 @@ def import_module(path: str) -> ModuleType:
     If we import by filepath, we must also assign a name to it and add it to sys.modules BEFORE
     calling 'spec.loader.exec_module' because there is code in pydantic which requires that the
     definition exist in sys.modules under that name.
-    """
+    """  # noqa
     try:
         if os.path.exists(path):
             name = uuid4().hex
@@ -42,7 +38,7 @@ def import_module(path: str) -> ModuleType:
             return importlib.import_module(path)
     except Exception as e:
         logger.error(
-            "The --module argument must be a module path separated by dots or a valid filepath"
+            "The --module argument must be a module path separated by dots or a valid filepath"  # noqa
         )
         raise e
 
@@ -65,8 +61,6 @@ def is_concrete_pydantic_model(obj) -> bool:
         return False
     elif obj is BaseModel:
         return False
-    # elif GenericModel and issubclass(obj, GenericModel):
-    #     return bool(obj.__concrete__)
     else:
         return issubclass(obj, BaseModel)
 
@@ -97,14 +91,15 @@ def clean_output_file(output_filename: str) -> None:
        clean typescript definitions without any duplicates. We don't actually want it in the output, so
        this function removes it from the generated typescript file.
     2. Adding a banner comment with clear instructions for how to regenerate the typescript definitions.
-    """
+    """  # noqa
     with open(output_filename, "r") as f:
         lines = f.readlines()
 
     basename = os.path.basename(output_filename).split(".")[0]
     typename = "".join(s.capitalize() for s in basename.split("_"))
 
-    start, end = None, None
+    # start, end = None, None
+    start = None
     for i, line in enumerate(lines):
         if line.rstrip("\r\n") == f"export const {typename}Schema = z.object({{":
             start = i
@@ -118,8 +113,8 @@ def clean_output_file(output_filename: str) -> None:
         "/* tslint:disable */\n",
         "/* eslint-disable */\n",
         "/**\n",
-        "/* This file was automatically generated from pydantic models by running pydantic2ts.\n",
-        "/* Do not modify it by hand - just update the pydantic models and then re-run the script\n",
+        "/* This file was automatically generated from pydantic models by running pydantic2ts.\n",  # noqa
+        "/* Do not modify it by hand - just update the pydantic models and then re-run the script\n",  # noqa
         "*/\n\n",
     ]
 
@@ -171,10 +166,7 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
         master_model = create_model(
             "_Master_", **{m.__name__: (m, ...) for m in models}
         )
-        # master_model.Config.extra = Extra.forbid
-        # master_model.Config.schema_extra = staticmethod(clean_schema)
 
-        # schema = json.loads(master_model.schema_json())
         master_model: BaseModel = create_model(
             "_Master_", **{m.__name__: (m, ...) for m in models}
         )
@@ -188,31 +180,10 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
 
         return json.dumps(schema, indent=2)
 
-        # return json.dumps(schema, indent=2)
-
     finally:
         for m, x in zip(models, model_extras):
             if x is not None:
                 m.Config.extra = x
-    # model_extras = [getattr(m.Config, "extra", None) for m in models]
-    # model_extras = [getattr(m.model_config, "extra", None) for m in models]
-
-    # try:
-    #     for m in models:
-    #         if "extra" in m.Config and m.model_config["extra"] != "allow":
-    #             m.Config["extra"] = "forbid"
-
-    # master_model: BaseModel = create_model(
-    #     "_Master_", **{m.__name__: (m, ...) for m in models}
-    # )
-    # master_model.Config["extra"] = "forbid"
-    #
-    # return json.dumps(master_model.model_json_schema(), indent=2)
-
-    # finally:
-    #     for m, x in zip(models, model_extras):
-    #         if x is not None:
-    #             m.Config["extra"] = x
 
 
 def generate_typescript_defs(
@@ -230,7 +201,7 @@ def generate_typescript_defs(
     :param exclude: optional, a tuple of names for pydantic models which should be omitted from the typescript output.
     :param json2ts_cmd: optional, the command that will execute json2ts. Provide this if the executable is not
                         discoverable or if it's locally installed (ex: 'yarn json2ts').
-    """
+    """  # noqa
     if " " not in json2ts_cmd and not shutil.which(json2ts_cmd):
         raise Exception(
             "json2ts must be installed. Instructions can be found here: "
