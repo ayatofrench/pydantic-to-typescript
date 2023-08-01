@@ -20,7 +20,7 @@ classifiers = [
 ]
 
 install_requires = [
-    "pydantic",
+    "pydantic==2.1.1",
 ]
 
 setup(

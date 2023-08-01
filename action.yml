@@ -55,10 +55,10 @@ runs:
       uses: actions/setup-node@v3
       with:
         node-version: 16
-    - name: Install json-schema-to-typescript
+    - name: Install quicktype 
       shell: bash
       run: |
-        npm i json-schema-to-typescript --location=global
+        npm i quicktype --location=global
     - name: Run pydantic2ts
       shell: bash
       env:

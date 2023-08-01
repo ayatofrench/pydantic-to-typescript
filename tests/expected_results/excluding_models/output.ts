@@ -1,12 +1,14 @@
-/* tslint:disable */
-/* eslint-disable */
-/**
-/* This file was automatically generated from pydantic models by running pydantic2ts.
-/* Do not modify it by hand - just update the pydantic models and then re-run the script
-*/
+import * as z from "zod";
 
-export interface Profile {
-  username: string;
-  age?: number;
-  hobbies: string[];
-}
+
+export const ProfileSchema = z.object({
+    "age": z.union([z.number(), z.null()]),
+    "hobbies": z.array(z.string()),
+    "username": z.string(),
+});
+export type Profile = z.infer<typeof ProfileSchema>;
+
+export const CliExcludingModelsSchema = z.object({
+    "Profile": ProfileSchema,
+});
+export type CliExcludingModels = z.infer<typeof CliExcludingModelsSchema>;

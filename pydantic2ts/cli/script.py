@@ -12,12 +12,8 @@ from types import ModuleType
 from typing import Any, Dict, List, Tuple, Type
 from uuid import uuid4
 
-from pydantic import BaseModel, Extra, create_model
+from pydantic import BaseModel, create_model, Extra
 
-try:
-    from pydantic.generics import GenericModel
-except ImportError:
-    GenericModel = None
 
 logger = logging.getLogger("pydantic2ts")
 
@@ -29,7 +25,7 @@ def import_module(path: str) -> ModuleType:
     If we import by filepath, we must also assign a name to it and add it to sys.modules BEFORE
     calling 'spec.loader.exec_module' because there is code in pydantic which requires that the
     definition exist in sys.modules under that name.
-    """
+    """  # noqa
     try:
         if os.path.exists(path):
             name = uuid4().hex
@@ -42,7 +38,7 @@ def import_module(path: str) -> ModuleType:
             return importlib.import_module(path)
     except Exception as e:
         logger.error(
-            "The --module argument must be a module path separated by dots or a valid filepath"
+            "The --module argument must be a module path separated by dots or a valid filepath"  # noqa
         )
         raise e
 
@@ -65,8 +61,6 @@ def is_concrete_pydantic_model(obj) -> bool:
         return False
     elif obj is BaseModel:
         return False
-    elif GenericModel and issubclass(obj, GenericModel):
-        return bool(obj.__concrete__)
     else:
         return issubclass(obj, BaseModel)
 
@@ -97,31 +91,41 @@ def clean_output_file(output_filename: str) -> None:
        clean typescript definitions without any duplicates. We don't actually want it in the output, so
        this function removes it from the generated typescript file.
     2. Adding a banner comment with clear instructions for how to regenerate the typescript definitions.
-    """
+    """  # noqa
     with open(output_filename, "r") as f:
         lines = f.readlines()
 
-    start, end = None, None
+    basename = os.path.basename(output_filename).split(".")[0]
+    typename = "".join(s.capitalize() for s in basename.split("_"))
+
+    # start, end = None, None
+    start = None
     for i, line in enumerate(lines):
-        if line.rstrip("\r\n") == "export interface _Master_ {":
+        if line.rstrip("\r\n") == f"export const {typename}Schema = z.object({{":
             start = i
-        elif (start is not None) and line.rstrip("\r\n") == "}":
-            end = i
             break
+        # elif (start is not None) and line.rstrip(
+        #     "\r\n"
+        # ) == f"export type {typename} = z.infer<{basename}Schema>;":
+        #     break
 
     banner_comment_lines = [
         "/* tslint:disable */\n",
         "/* eslint-disable */\n",
         "/**\n",
-        "/* This file was automatically generated from pydantic models by running pydantic2ts.\n",
-        "/* Do not modify it by hand - just update the pydantic models and then re-run the script\n",
+        "/* This file was automatically generated from pydantic models by running pydantic2ts.\n",  # noqa
+        "/* Do not modify it by hand - just update the pydantic models and then re-run the script\n",  # noqa
         "*/\n\n",
     ]
 
-    new_lines = banner_comment_lines + lines[:start] + lines[(end + 1) :]
+    new_lines = None
+    # if end:
+    # new_lines = banner_comment_lines + lines[:start] + lines[(end + 1) :]
+    new_lines = banner_comment_lines + lines[:start]
 
-    with open(output_filename, "w") as f:
-        f.writelines(new_lines)
+    if new_lines:
+        with open(output_filename, "w") as f:
+            f.writelines(new_lines)
 
 
 def clean_schema(schema: Dict[str, Any]) -> None:
@@ -141,25 +145,40 @@ def clean_schema(schema: Dict[str, Any]) -> None:
         del schema["description"]
 
 
-def generate_json_schema(models: List[Type[BaseModel]]) -> str:
-    """
-    Create a top-level '_Master_' model with references to each of the actual models.
-    Generate the schema for this model, which will include the schemas for all the
-    nested models. Then clean up the schema.
+def generate_with_model_config(models: List[Type[BaseModel]]) -> str:
+    model_extras = [getattr(m.model_config, "extra", None) for m in models]
 
-    One weird thing we do is we temporarily override the 'extra' setting in models,
-    changing it to 'forbid' UNLESS it was explicitly set to 'allow'. This prevents
-    '[k: string]: any' from being added to every interface. This change is reverted
-    once the schema has been generated.
-    """
+    try:
+        for m in models:
+            if "extra" in m.model_config and m.model_config["extra"] != "allow":
+                m.model_config["extra"] = "forbid"
+
+        master_model: BaseModel = create_model(
+            "_Master_", **{m.__name__: (m, ...) for m in models}
+        )
+        master_model.model_config["extra"] = "forbid"
+
+        return json.dumps(master_model.model_json_schema(), indent=2)
+
+    finally:
+        for m, x in zip(models, model_extras):
+            if x is not None:
+                m.model_config["extra"] = x
+
+
+def generate_with_config(models: List[Type[BaseModel]]) -> str:
     model_extras = [getattr(m.Config, "extra", None) for m in models]
 
     try:
         for m in models:
-            if getattr(m.Config, "extra", None) != Extra.allow:
+            if getattr(m.Config, "extra", None) != "allow":
                 m.Config.extra = Extra.forbid
 
-        master_model = create_model(
+        # master_model = create_model(
+        #     "_Master_", **{m.__name__: (m, ...) for m in models}
+        # )
+
+        master_model: BaseModel = create_model(
             "_Master_", **{m.__name__: (m, ...) for m in models}
         )
         master_model.Config.extra = Extra.forbid
@@ -178,8 +197,57 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
                 m.Config.extra = x
 
 
+def generate_json_schema(models: List[Type[BaseModel]]) -> str:
+    """
+    Create a top-level '_Master_' model with references to each of the actual models.
+    Generate the schema for this model, which will include the schemas for all the
+    nested models. Then clean up the schema.
+
+    One weird thing we do is we temporarily override the 'extra' setting in models,
+    changing it to 'forbid' UNLESS it was explicitly set to 'allow'. This prevents
+    '[k: string]: any' from being added to every interface. This change is reverted
+    once the schema has been generated.
+    """
+    try:
+        return generate_with_model_config(models)
+    except Exception:
+        return generate_with_config(models)
+    # model_extras = [getattr(m.model_config, "extra", None) for m in models]
+    #
+    # try:
+    #     for m in models:
+    #         if getattr(m.Config, "extra", None) != "allow":
+    #             m.Config.extra = Extra.forbid
+    #
+    #     master_model = create_model(
+    #         "_Master_", **{m.__name__: (m, ...) for m in models}
+    #     )
+    #
+    #     master_model: BaseModel = create_model(
+    #         "_Master_", **{m.__name__: (m, ...) for m in models}
+    #     )
+    # master_model.Config.extra = Extra.forbid
+    #     master_model.Config.schema_extra = staticmethod(clean_schema)
+    #
+    #     schema = json.loads(master_model.schema_json())
+    #
+    #     for d in schema.get("definitions", {}).values():
+    #         clean_schema(d)
+    #
+    #     return json.dumps(schema, indent=2)
+    #
+    # finally:
+    #     for m, x in zip(models, model_extras):
+    #         if x is not None:
+    #             m.Config.extra = x
+
+
 def generate_typescript_defs(
-    module: str, output: str, exclude: Tuple[str] = (), json2ts_cmd: str = "json2ts"
+    module: str,
+    output: str,
+    exclude: Tuple[str] = (),
+    schema_out_dir: str | None = None,
+    json2ts_cmd: str = "quicktype",
 ) -> None:
     """
     Convert the pydantic models in a python module into typescript interfaces.
@@ -189,7 +257,7 @@ def generate_typescript_defs(
     :param exclude: optional, a tuple of names for pydantic models which should be omitted from the typescript output.
     :param json2ts_cmd: optional, the command that will execute json2ts. Provide this if the executable is not
                         discoverable or if it's locally installed (ex: 'yarn json2ts').
-    """
+    """  # noqa
     if " " not in json2ts_cmd and not shutil.which(json2ts_cmd):
         raise Exception(
             "json2ts must be installed. Instructions can be found here: "
@@ -206,22 +274,31 @@ def generate_typescript_defs(
     logger.info("Generating JSON schema from pydantic models...")
 
     schema = generate_json_schema(models)
-    schema_dir = mkdtemp()
-    schema_file_path = os.path.join(schema_dir, "schema.json")
+    schema_dir = None
 
-    with open(schema_file_path, "w") as f:
-        f.write(schema)
+    if schema_out_dir:
+        logger.info("We should be here")
+        # TODO: Fix the file name
+        schema_file_path = os.path.join(schema_out_dir, "schema.json")
+        with open(schema_file_path, "w") as f:
+            f.write(schema)
+    else:
+        schema_dir = mkdtemp()
+        schema_file_path = os.path.join(schema_dir, "schema.json")
+        with open(schema_file_path, "w") as f:
+            f.write(schema)
 
     logger.info("Converting JSON schema to typescript definitions...")
 
     json2ts_exit_code = os.system(
-        f'{json2ts_cmd} -i {schema_file_path} -o {output} --bannerComment ""'
+        f"{json2ts_cmd} -s schema {schema_file_path} -l typescript-zod -o {output}"
     )
 
-    shutil.rmtree(schema_dir)
+    if schema_dir:
+        shutil.rmtree(schema_dir)
 
     if json2ts_exit_code == 0:
-        clean_output_file(output)
+        # clean_output_file(output)
         logger.info(f"Saved typescript definitions to {output}.")
     else:
         raise RuntimeError(
@@ -255,11 +332,16 @@ def parse_cli_args(args: List[str] = None) -> argparse.Namespace:
         "This option can be defined multiple times.",
     )
     parser.add_argument(
+        "--schema-dir",
+        dest="schema_dir",
+        default=None,
+    )
+    parser.add_argument(
         "--json2ts-cmd",
         dest="json2ts_cmd",
-        default="json2ts",
+        default="quicktype",
         help="path to the json-schema-to-typescript executable.\n"
-        "Provide this if it's not discoverable or if it's only installed locally (example: 'yarn json2ts').\n"
+        "Provide this if it's not discoverable or if it's only installed locally (example: 'yarn json2ts').\n"  # noqa
         "(default: json2ts)",
     )
     return parser.parse_args(args)
@@ -275,6 +357,7 @@ def main() -> None:
         args.module,
         args.output,
         tuple(args.exclude),
+        args.schema_dir,
         args.json2ts_cmd,
     )
 
