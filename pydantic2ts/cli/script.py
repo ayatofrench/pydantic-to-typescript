@@ -285,7 +285,7 @@ def parse_cli_args(args: List[str] = None) -> argparse.Namespace:
         dest="json2ts_cmd",
         default="quicktype",
         help="path to the json-schema-to-typescript executable.\n"
-        "Provide this if it's not discoverable or if it's only installed locally (example: 'yarn json2ts').\n"
+        "Provide this if it's not discoverable or if it's only installed locally (example: 'yarn json2ts').\n"  # noqa
         "(default: json2ts)",
     )
     return parser.parse_args(args)

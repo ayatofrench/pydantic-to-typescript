@@ -28,7 +28,7 @@ def run_test(
     """
     Execute pydantic2ts logic for converting pydantic models into tyepscript definitions.
     Compare the output with the expected output, verifying it is identical.
-    """
+    """  # noqa
     module_path = module_path or get_input_module(test_name)
     output_path = tmpdir.join(f"cli_{test_name}.ts").strpath
 
@@ -109,7 +109,8 @@ def test_relative_filepath(tmpdir):
 #     output_path = tmpdir.join("cli_single_module.ts").strpath
 #
 #     # If the json2ts command has no spaces and the executable cannot be found,
-#     # that means the user either hasn't installed json-schema-to-typescript or they made a typo.
+#     # that means the user either hasn't installed json-schema-to-typescript
+# or they made a typo.
 #     # We should raise a descriptive error with installation instructions.
 #     invalid_global_cmd = "someCommandWhichDefinitelyDoesNotExist"
 #     with pytest.raises(Exception) as exc1:
@@ -123,7 +124,8 @@ def test_relative_filepath(tmpdir):
 #         == "json2ts must be installed. Instructions can be found here: https://www.npmjs.com/package/json-schema-to-typescript"
 #     )
 #
-#     # But if the command DOES contain spaces (ex: "yarn json2ts") they're likely using a locally installed CLI.
+#     # But if the command DOES contain spaces (ex: "yarn json2ts") they're likely using
+# a locally installed CLI.
 #     # We should not be validating the command in this case.
 #     # Instead we should just be *trying* to run it and checking the exit code.
 #     invalid_local_cmd = "yaaaarn json2tsbutwithatypo"
