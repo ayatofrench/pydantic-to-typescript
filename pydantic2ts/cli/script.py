@@ -156,7 +156,7 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
     '[k: string]: any' from being added to every interface. This change is reverted
     once the schema has been generated.
     """
-    model_extras = [getattr(m.Config, "extra", None) for m in models]
+    model_extras = [getattr(m.model_config, "extra", None) for m in models]
 
     try:
         for m in models:
