@@ -12,7 +12,7 @@ from types import ModuleType
 from typing import Any, Dict, List, Tuple, Type
 from uuid import uuid4
 
-from pydantic import BaseModel, Extra, create_model
+from pydantic import BaseModel, create_model
 
 
 logger = logging.getLogger("pydantic2ts")
@@ -160,30 +160,48 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
 
     try:
         for m in models:
-            if getattr(m.Config, "extra", None) != "allow":
-                m.Config.extra = Extra.forbid
-
-        master_model = create_model(
-            "_Master_", **{m.__name__: (m, ...) for m in models}
-        )
+            if "extra" in m.model_config and m.model_config["extra"] != "allow":
+                m.model_config["extra"] = "forbid"
 
         master_model: BaseModel = create_model(
             "_Master_", **{m.__name__: (m, ...) for m in models}
         )
-        master_model.Config.extra = Extra.forbid
-        master_model.Config.schema_extra = staticmethod(clean_schema)
+        master_model.model_config["extra"] = "forbid"
 
-        schema = json.loads(master_model.schema_json())
-
-        for d in schema.get("definitions", {}).values():
-            clean_schema(d)
-
-        return json.dumps(schema, indent=2)
+        return json.dumps(master_model.model_json_schema(), indent=2)
 
     finally:
         for m, x in zip(models, model_extras):
             if x is not None:
-                m.Config.extra = x
+                m.model_config["extra"] = x
+    # model_extras = [getattr(m.model_config, "extra", None) for m in models]
+    #
+    # try:
+    #     for m in models:
+    #         if getattr(m.Config, "extra", None) != "allow":
+    #             m.Config.extra = Extra.forbid
+    #
+    #     master_model = create_model(
+    #         "_Master_", **{m.__name__: (m, ...) for m in models}
+    #     )
+    #
+    #     master_model: BaseModel = create_model(
+    #         "_Master_", **{m.__name__: (m, ...) for m in models}
+    #     )
+    # master_model.Config.extra = Extra.forbid
+    #     master_model.Config.schema_extra = staticmethod(clean_schema)
+    #
+    #     schema = json.loads(master_model.schema_json())
+    #
+    #     for d in schema.get("definitions", {}).values():
+    #         clean_schema(d)
+    #
+    #     return json.dumps(schema, indent=2)
+    #
+    # finally:
+    #     for m, x in zip(models, model_extras):
+    #         if x is not None:
+    #             m.Config.extra = x
 
 
 def generate_typescript_defs(
