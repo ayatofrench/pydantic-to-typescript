@@ -210,7 +210,7 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
     """
     try:
         return generate_with_model_config(models)
-    finally:
+    except Exception:
         return generate_with_config(models)
     # model_extras = [getattr(m.model_config, "extra", None) for m in models]
     #
