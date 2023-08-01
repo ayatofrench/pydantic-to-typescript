@@ -12,7 +12,7 @@ from types import ModuleType
 from typing import Any, Dict, List, Tuple, Type
 from uuid import uuid4
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, create_model, Extra
 
 
 logger = logging.getLogger("pydantic2ts")
@@ -145,17 +145,7 @@ def clean_schema(schema: Dict[str, Any]) -> None:
         del schema["description"]
 
 
-def generate_json_schema(models: List[Type[BaseModel]]) -> str:
-    """
-    Create a top-level '_Master_' model with references to each of the actual models.
-    Generate the schema for this model, which will include the schemas for all the
-    nested models. Then clean up the schema.
-
-    One weird thing we do is we temporarily override the 'extra' setting in models,
-    changing it to 'forbid' UNLESS it was explicitly set to 'allow'. This prevents
-    '[k: string]: any' from being added to every interface. This change is reverted
-    once the schema has been generated.
-    """
+def generate_with_model_config(models: List[Type[BaseModel]]) -> str:
     model_extras = [getattr(m.model_config, "extra", None) for m in models]
 
     try:
@@ -174,6 +164,54 @@ def generate_json_schema(models: List[Type[BaseModel]]) -> str:
         for m, x in zip(models, model_extras):
             if x is not None:
                 m.model_config["extra"] = x
+
+
+def generate_with_config(models: List[Type[BaseModel]]) -> str:
+    model_extras = [getattr(m.Config, "extra", None) for m in models]
+
+    try:
+        for m in models:
+            if getattr(m.Config, "extra", None) != "allow":
+                m.Config.extra = Extra.forbid
+
+        # master_model = create_model(
+        #     "_Master_", **{m.__name__: (m, ...) for m in models}
+        # )
+
+        master_model: BaseModel = create_model(
+            "_Master_", **{m.__name__: (m, ...) for m in models}
+        )
+        master_model.Config.extra = Extra.forbid
+        master_model.Config.schema_extra = staticmethod(clean_schema)
+
+        schema = json.loads(master_model.schema_json())
+
+        for d in schema.get("definitions", {}).values():
+            clean_schema(d)
+
+        return json.dumps(schema, indent=2)
+
+    finally:
+        for m, x in zip(models, model_extras):
+            if x is not None:
+                m.Config.extra = x
+
+
+def generate_json_schema(models: List[Type[BaseModel]]) -> str:
+    """
+    Create a top-level '_Master_' model with references to each of the actual models.
+    Generate the schema for this model, which will include the schemas for all the
+    nested models. Then clean up the schema.
+
+    One weird thing we do is we temporarily override the 'extra' setting in models,
+    changing it to 'forbid' UNLESS it was explicitly set to 'allow'. This prevents
+    '[k: string]: any' from being added to every interface. This change is reverted
+    once the schema has been generated.
+    """
+    try:
+        return generate_with_model_config(models)
+    finally:
+        return generate_with_config(models)
     # model_extras = [getattr(m.model_config, "extra", None) for m in models]
     #
     # try:
